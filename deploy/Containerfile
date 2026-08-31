@@ -1,0 +1,26 @@
+FROM oven/bun:1 AS web
+WORKDIR /src
+COPY web/package.json web/bun.lock ./
+RUN bun install --frozen-lockfile
+COPY web/ ./
+RUN bun run build
+
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+RUN CGO_ENABLED=0 go build -o /cal ./cmd/cal
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY --from=build /cal /usr/local/bin/cal
+COPY --from=web /src/dist /app/web/dist
+ENV CAL_DB=/data/cal.db CAL_WEB=/app/web/dist CAL_ADDR=:8080
+VOLUME /data
+EXPOSE 8080
+USER nobody
+ENTRYPOINT ["cal"]
+CMD ["serve"]

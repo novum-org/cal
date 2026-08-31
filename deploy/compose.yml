@@ -1,0 +1,18 @@
+services:
+  cal:
+    build:
+      context: ..
+      dockerfile: deploy/Containerfile
+    ports:
+      - "8080:8080"
+    environment:
+      CAL_ADMIN_EMAIL: ${CAL_ADMIN_EMAIL:-}
+      CAL_ADMIN_PASSWORD: ${CAL_ADMIN_PASSWORD:-}
+      CAL_SIGNUP: ${CAL_SIGNUP:-setup}
+      CAL_SECURE: ${CAL_SECURE:-0}
+    volumes:
+      - cal-data:/data
+    restart: unless-stopped
+
+volumes:
+  cal-data:
