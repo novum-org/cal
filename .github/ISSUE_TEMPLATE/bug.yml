@@ -1,0 +1,65 @@
+name: Bug
+description: Something that is wrong in the engine, UI, ingest, or a self-hosted instance.
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - engine
+        - ui
+        - auth
+        - sessions
+        - sync
+        - sources
+        - self-host
+        - export
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened
+      description: For allocation bugs, cite the ENGINE.md rule id (R1, R3, I1, …).
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - Hosted (Novum)
+        - Self-hosted
+        - Local `bun dev`
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Inputs / snapshot
+      description: Paste the JSON snapshot if the bug is in the math. Strip API keys and tokens.
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: Browser, OS, cal version or commit, self-host notes.

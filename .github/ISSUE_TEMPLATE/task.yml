@@ -1,0 +1,64 @@
+name: Task
+description: Planned implementation work already in scope (v1 or roadmap).
+title: "task: "
+labels: ["type:task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for work we already decided to do. New product ideas go in **Feature**.
+  - type: dropdown
+    id: horizon
+    attributes:
+      label: Horizon
+      options:
+        - v1
+        - roadmap
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - engine
+        - ui
+        - auth
+        - sessions
+        - sync
+        - sources
+        - self-host
+        - export
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0
+        - P1
+        - P2
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: One or two sentences. Link the tracking issue if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Checklist of observable outcomes, not implementation steps.
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Stack constraints, files to touch, or decisions still open.

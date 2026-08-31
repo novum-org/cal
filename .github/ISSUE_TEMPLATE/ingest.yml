@@ -1,0 +1,67 @@
+name: Ingest source
+description: Add or change an API source (Tebex, Discord, metrics, Stripe, …).
+title: "ingest: "
+labels: ["type:ingest"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sources implement one interface and return `Partial<Inputs>` for the fields they actually know.
+        Revenue is **net of fees and chargebacks**, never gross.
+        Secrets stay on the server. The static frontend must not see them.
+  - type: dropdown
+    id: horizon
+    attributes:
+      label: Horizon
+      options:
+        - v1
+        - roadmap
+    validations:
+      required: true
+  - type: input
+    id: source_id
+    attributes:
+      label: Source id
+      description: Stable id, like `tebex`, `discord`, `spark`.
+      placeholder: tebex
+    validations:
+      required: true
+  - type: checkboxes
+    id: fields
+    attributes:
+      label: Fields this source fills
+      options:
+        - label: cash_in_month
+        - label: infra_cost_month
+        - label: tps_pct_above_19
+        - label: uptime_pct_month
+        - label: concurrent_avg
+        - label: unique_players_week
+        - label: discord_members
+        - label: discord_net_growth_month
+        - label: other (say which in Notes)
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: API
+      description: Docs URL, auth type, and whether the fetch must be server-side.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      value: |
+        - [ ] Implements the shared source interface
+        - [ ] Runs server-side if it needs a secret
+        - [ ] Returns only fields it actually knows
+        - [ ] Missing/broken API does not invent numbers (empty patch + visible error)
+        - [ ] Credentials never appear in the frontend bundle, public export, or embed
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes

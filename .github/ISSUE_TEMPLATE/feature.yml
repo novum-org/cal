@@ -1,0 +1,64 @@
+name: Feature
+description: New capability that is not already on the board.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        v1 is **engine + ingest** (generic policy, sessions, APIs, planned vs actual, self-host migration).
+        Embed, live collab, and extra storefronts are **roadmap**. Say which one this is.
+  - type: dropdown
+    id: horizon
+    attributes:
+      label: Horizon
+      description: If you are not sure, pick roadmap. We will move it if it belongs in v1.
+      options:
+        - v1
+        - roadmap
+        - unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - engine
+        - ui
+        - auth
+        - sessions
+        - sync
+        - sources
+        - self-host
+        - export
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Who hits this, and what can they not do today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should exist. Not how to implement it, unless the constraint is the point.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: What this issue must not grow into.
