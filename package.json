@@ -1,0 +1,15 @@
+{
+  "name": "novum-cal",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run scripts/dev.ts",
+    "dev:api": "go run ./cmd/cal serve",
+    "dev:web": "cd web && bun run dev",
+    "build": "cd web && bun run build && cd .. && go build -o bin/cal ./cmd/cal",
+    "typecheck": "cd web && bun run typecheck",
+    "lint": "cd web && bunx oxlint .",
+    "test": "go test ./...",
+    "check": "go test ./... && cd web && bun run typecheck && bunx oxlint ."
+  }
+}

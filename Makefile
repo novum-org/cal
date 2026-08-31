@@ -1,4 +1,7 @@
-.PHONY: test serve web build
+.PHONY: dev test serve web build
+
+dev:
+	bun run scripts/dev.ts
 
 test:
 	go test ./...

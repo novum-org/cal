@@ -8,20 +8,36 @@ never sees store secrets and never allocates money on its own.
 
 ## Run (dev)
 
-Two processes.
+Once, to install the frontend deps:
 
 ```bash
-go run ./cmd/cal serve --addr :8080 --db data/cal.db
+cd web && bun install
 ```
 
+Then, from the repo root, one command for both halves:
+
 ```bash
-cd web
-bun install
 bun dev
 ```
 
+That builds the API to `bin/cal-dev`, waits for it to answer on `:8080`, then
+starts Vite. Output from both is prefixed (`api │`, `web │`) and Ctrl-C stops
+the pair. If either process dies the other is stopped too, so there is never
+half an app left running.
+
 Vite proxies `/api` to `:8080`. Open the URL Vite prints. First visit creates
 the admin user (or set `CAL_ADMIN_EMAIL` / `CAL_ADMIN_PASSWORD`).
+
+Go code is compiled when `bun dev` starts, so restart it after touching Go.
+The frontend hot reloads on its own. To run one half alone:
+
+```bash
+bun run dev:api
+```
+
+```bash
+bun run dev:web
+```
 
 ```bash
 go test ./...
