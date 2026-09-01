@@ -12,9 +12,15 @@
  */
 
 import { spawn, type Subprocess } from 'bun'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const ROOT = new URL('..', import.meta.url).pathname
-const API_BIN = 'bin/cal-dev'
+// fileURLToPath, not URL.pathname: on Windows the latter yields "/E:/...", which
+// is not a directory any process can be spawned in.
+const ROOT = fileURLToPath(new URL('..', import.meta.url))
+// Windows will not spawn an extensionless file, and `go build -o` writes exactly
+// the name it is given, so the suffix has to be part of both.
+const API_BIN = join(ROOT, 'bin', process.platform === 'win32' ? 'cal-dev.exe' : 'cal-dev')
 
 /** CAL_ADDR is ":8080" or "host:8080"; the health check only needs the port. */
 const apiPort = (process.env['CAL_ADDR'] ?? ':8080').split(':').pop() || '8080'
@@ -103,4 +109,4 @@ if (await waitForApi()) {
   console.log(paint(33, `api did not answer on :${apiPort} yet, starting the frontend anyway.`))
 }
 
-if (!stopping) start('web', 35, ['bun', 'run', 'dev'], `${ROOT}web`)
+if (!stopping) start('web', 35, ['bun', 'run', 'dev'], join(ROOT, 'web'))

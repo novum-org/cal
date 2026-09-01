@@ -13,3 +13,4 @@
     "check": "go test ./... && cd web && bun run typecheck && bunx oxlint ."
   }
 }
+
