@@ -12,11 +12,17 @@ func share(band Band, id string) float64 {
 	return band.Shares[id]
 }
 
+// RunwayMonths is how many further months of infra the cash covers once this
+// month is paid. It never goes below zero: not covering the current month is
+// zero runway, not negative runway, and "-1.0 meses" is not a reading.
 func RunwayMonths(in Inputs) *float64 {
 	if in.InfraCostMonth <= 0 {
 		return nil
 	}
 	left := in.CashOnHandStart + in.CashInMonth - in.InfraCostMonth
+	if left < 0 {
+		left = 0
+	}
 	v := left / in.InfraCostMonth
 	return &v
 }
