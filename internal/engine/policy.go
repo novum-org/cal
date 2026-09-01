@@ -1,6 +1,9 @@
 package engine
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 func ptr(n float64) *float64 { return &n }
 
@@ -54,10 +57,80 @@ func NovumPreset() Policy {
 	}
 }
 
+// GenericPreset is the starting point for a server that is not Novum: the same
+// infra-first shape, but none of Novum's numbers. One band instead of four, no
+// stage gates, no community or load rules, and every threshold at zero so it
+// alerts on nothing until the operator sets their own floors.
 func GenericPreset() Policy {
-	p := NovumPreset()
-	p.Name = "Generic"
-	return p
+	return Policy{
+		Name: "Generic",
+		Buckets: []Bucket{
+			{ID: "infra", Label: "Infra", Note: "Se paga antes que nada"},
+			{ID: "ef", Label: "Fondo de emergencia", Note: "Colchón para meses malos"},
+			{ID: "product", Label: "Producto", Note: "El juego y sus herramientas"},
+			{ID: "growth", Label: "Crecimiento", Note: "Traer gente nueva"},
+			{ID: "people", Label: "Equipo", Note: "Bonos y reparto"},
+			{ID: "infra_buffer", Label: "Reserva de infra", Note: "Crecimiento frenado por el server"},
+			{ID: "unallocated", Label: "Sin asignar", Note: "Queda en la caja"},
+		},
+		Bands: []Band{
+			{
+				ID: "todo", Label: "Todo el sobrante", Min: 0, Max: nil,
+				Shares: map[string]float64{"ef": 0.2, "product": 0.4, "growth": 0.2, "people": 0.2},
+			},
+		},
+		Stages: map[string]StageRule{
+			"alpha": {TPSMin: 0, UptimeMin: nil},
+			"beta":  {TPSMin: 0, UptimeMin: nil},
+			"v1":    {TPSMin: 0, UptimeMin: nil},
+		},
+		InfraID:                "infra",
+		EFID:                   "ef",
+		ProductID:              "product",
+		GrowthID:               "growth",
+		PeopleID:               "people",
+		InfraBufferID:          "infra_buffer",
+		UnallocatedID:          "unallocated",
+		DiscordPerPlayerMax:    0,
+		ConcurrentHigh:         0,
+		InfraHealthUptimeFloor: 0,
+		MinRunwayMonths:        0,
+		CharterEFShare:         0.20,
+		StageGates:             false,
+		CommunityRatio:         false,
+		LoadPressure:           false,
+		PeopleFromProfit:       true,
+		EFCap:                  true,
+	}
+}
+
+// Preset describes a policy a session can start from or reset to.
+type Preset struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+var Presets = []Preset{
+	{
+		ID:          "novum",
+		Name:        "Novum",
+		Description: "Bandas por tramo, gates por etapa y reglas de comunidad y carga.",
+	},
+	{
+		ID:          "generic",
+		Name:        "Genérico",
+		Description: "Una banda, sin gates ni umbrales. Para llenar con los números propios.",
+	},
+}
+
+// PresetByID falls back to Novum, which is what CreateSpace has always done for
+// an unknown preset name.
+func PresetByID(id string) Policy {
+	if strings.EqualFold(id, "generic") {
+		return GenericPreset()
+	}
+	return NovumPreset()
 }
 
 func PickBand(policy Policy, remainingUSD float64) Band {

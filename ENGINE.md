@@ -1,11 +1,28 @@
 # ENGINE.md
 
-Audit of `src/lib/engine.ts`. Every id in this file is the id you see on the
+Audit of `internal/engine`. Every id in this file is the id you see on the
 alerts in the UI, so an alert can always be traced back to a paragraph here.
+
+## The policy is data
+
+The engine has no servers in it. Buckets, bands, stage thresholds, and the
+on/off switch for every rule below live on the session as a `Policy` value, and
+`Calculate(inputs, policy)` reads them. Nothing here is reachable from a
+`if server == "novum"`.
+
+The numbers quoted in this document are the **Novum preset**
+(`engine.NovumPreset`): four bands, stage gates on, community ratio on, load
+pressure on, EF at six months of infra. `engine.GenericPreset` is the same
+machine with none of that judgment: one band over the whole range, every gate
+off, every threshold at zero. A session can start from either and then edit its
+own bands, shares, and thresholds without touching this file.
+
+Each rule below names the policy field that governs it, so "why did R4 fire"
+is always answerable from the session's own policy.
 
 ## Ground rules
 
-- `calculate(inputs, settings)` is pure. Same inputs, same output, no I/O.
+- `Calculate(inputs, policy)` is pure. Same inputs, same output, no I/O.
 - All money is converted to integer cents on the way in and back to USD only on
   the way out. Shares are floored, never rounded up, and the remainder lands in
   `unallocated`. That is why the table always adds up to `cash_in_month` exactly.
@@ -19,12 +36,13 @@ alerts in the UI, so an alert can always be traced back to a paragraph here.
 remaining     = max(0, cash_in_month - infra_cost_month)
 ef_cap        = infra_cost_month * ef_target_months
 ef_room       = max(0, ef_cap - ef_current)
-runway_months = (cash_on_hand_start + cash_in_month - infra_cost_month) / infra_cost_month
+runway_months = max(0, cash_on_hand_start + cash_in_month - infra_cost_month) / infra_cost_month
 discord_ratio = discord_members / unique_players_week   (null when there are no players)
 ```
 
 `runway_months` is null when `infra_cost_month` is 0, because dividing by a cost
-that does not exist says nothing.
+that does not exist says nothing. It is floored at zero: a month the cash cannot
+even cover is zero runway, not negative runway.
 
 ### Two different notions of health
 

@@ -295,6 +295,13 @@ func TestRunway(t *testing.T) {
 	}
 }
 
+func TestRunwayNeverNegative(t *testing.T) {
+	r := run(t, Inputs{CashOnHandStart: 0, CashInMonth: 0, InfraCostMonth: 35})
+	if r.RunwayMonths == nil || *r.RunwayMonths != 0 {
+		t.Fatalf("runway %+v, want 0", r.RunwayMonths)
+	}
+}
+
 func TestNoInfraNoRunway(t *testing.T) {
 	in := healthy(Inputs{})
 	in.InfraCostMonth = 0
@@ -341,5 +348,48 @@ func TestGenericPolicyDifferentShares(t *testing.T) {
 	}
 	if math.Abs(r.Allocation.Sum()-135) > 0.005 {
 		t.Fatalf("sum %v", r.Allocation.Sum())
+	}
+}
+
+// The generic preset must not carry Novum's judgment: one band, no stage gates,
+// no community or load rules, and no thresholds that alert on their own. (#13)
+func TestGenericPresetHasNoNovumRules(t *testing.T) {
+	p := GenericPreset()
+	if len(p.Bands) != 1 {
+		t.Fatalf("bands %d, want a single catch-all", len(p.Bands))
+	}
+	if p.StageGates || p.CommunityRatio || p.LoadPressure {
+		t.Fatalf("rules still on: %+v", p)
+	}
+	for stage, rule := range p.Stages {
+		if rule.TPSMin != 0 || rule.UptimeMin != nil {
+			t.Fatalf("stage %s carries a threshold: %+v", stage, rule)
+		}
+	}
+
+	// A month that Novum would gate on TPS allocates normally here.
+	in := DefaultInputs()
+	in.CashInMonth = 535
+	in.InfraCostMonth = 35
+	in.TPSPctAbove19 = 10
+	in.UptimePctMonth = 50
+	r := Calculate(in, p)
+	if r.Allocation.Growth != 100 {
+		t.Fatalf("growth %v, want 20%% of 500 with no gates", r.Allocation.Growth)
+	}
+	if math.Abs(r.Allocation.Sum()-535) > 0.005 {
+		t.Fatalf("sum %v", r.Allocation.Sum())
+	}
+}
+
+func TestNovumPresetStillGatesTheSameMonth(t *testing.T) {
+	in := DefaultInputs()
+	in.CashInMonth = 535
+	in.InfraCostMonth = 35
+	in.TPSPctAbove19 = 10
+	in.UptimePctMonth = 50
+	r := Calculate(in, NovumPreset())
+	if r.Allocation.Growth != 0 {
+		t.Fatalf("growth %v, want 0 behind the stage gate", r.Allocation.Growth)
 	}
 }
