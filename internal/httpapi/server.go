@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/novum-org/cal/internal/engine"
+	"github.com/novum-org/cal/internal/sources"
 	"github.com/novum-org/cal/internal/store"
 )
 
@@ -27,15 +28,16 @@ type Config struct {
 }
 
 type Server struct {
-	Store  *store.Store
-	Config Config
+	Store   *store.Store
+	Config  Config
+	Sources *sources.Registry
 }
 
 func New(st *store.Store, cfg Config) *Server {
 	if cfg.Signup == "" {
 		cfg.Signup = "setup"
 	}
-	return &Server{Store: st, Config: cfg}
+	return &Server{Store: st, Config: cfg, Sources: sources.Default(nil)}
 }
 
 func (s *Server) Router() http.Handler {
@@ -51,6 +53,8 @@ func (s *Server) Router() http.Handler {
 	r.Post("/api/auth/login", s.login)
 	r.Post("/api/auth/logout", s.logout)
 	r.Get("/api/auth/me", s.me)
+	r.Get("/api/auth/invites/{code}", s.getInvite)
+	r.Post("/api/auth/redeem", s.redeemInvite)
 
 	r.Group(func(r chi.Router) {
 		r.Use(s.requireAuth)
@@ -58,12 +62,27 @@ func (s *Server) Router() http.Handler {
 		r.Post("/api/sessions", s.createSpace)
 		r.Get("/api/sessions/{id}", s.getSpace)
 		r.Patch("/api/sessions/{id}", s.patchSpace)
+		r.Get("/api/presets", s.listPresets)
+		r.Post("/api/sessions/{id}/preset", s.applyPreset)
+		r.Get("/api/sessions/{id}/members", s.listMembers)
+		r.Post("/api/sessions/{id}/members", s.addMember)
+		r.Delete("/api/sessions/{id}/members/{userId}", s.removeMember)
+		r.Get("/api/sessions/{id}/invites", s.listInvites)
+		r.Delete("/api/sessions/{id}/invites/{code}", s.revokeInvite)
 		r.Get("/api/sessions/{id}/months", s.listMonths)
 		r.Get("/api/sessions/{id}/months/{month}", s.getMonth)
 		r.Put("/api/sessions/{id}/months/{month}", s.putMonth)
 		r.Post("/api/sessions/{id}/preview", s.preview)
 		r.Post("/api/sessions/{id}/months/{month}/plan", s.planMonth)
 		r.Post("/api/sessions/{id}/months/{month}/close", s.closeMonth)
+		r.Post("/api/sessions/{id}/months/{month}/reopen", s.reopenMonth)
+		r.Get("/api/sessions/{id}/months/{month}/comments", s.listMonthComments)
+		r.Post("/api/sessions/{id}/months/{month}/comments", s.addMonthComment)
+		r.Post("/api/sessions/{id}/months/{month}/pull", s.pullSources)
+		r.Get("/api/sources", s.listSourceCatalogue)
+		r.Get("/api/sessions/{id}/sources", s.listSourceConfigs)
+		r.Put("/api/sessions/{id}/sources/{sourceId}", s.putSourceConfig)
+		r.Delete("/api/sessions/{id}/sources/{sourceId}", s.deleteSourceConfig)
 		r.Get("/api/export", s.exportDump)
 		r.Post("/api/import", s.importDump)
 	})
@@ -378,6 +397,11 @@ type putMonthBody struct {
 	Inputs   engine.Inputs      `json:"inputs"`
 	Actuals  map[string]float64 `json:"actuals"`
 	Revision int                `json:"revision"`
+	// Sources is what the last pull reported, echoed back so the saved month
+	// remembers which numbers came from an API. It is checked against the
+	// registry before it is stored, so it can only ever say that a real source
+	// filled a field that source declares.
+	Sources map[string]sources.Origin `json:"sources"`
 }
 
 func (s *Server) putMonth(w http.ResponseWriter, r *http.Request) {
@@ -394,8 +418,16 @@ func (s *Server) putMonth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b.Inputs.Month = month
+	// A closed month is a record, not a draft. Editing its inputs would leave
+	// the plan snapshot describing numbers that are no longer there, so the
+	// write is refused and the caller is told to reopen instead.
+	if cur, err := s.Store.GetMonth(id, month); err == nil && cur.Status == store.StatusClosed {
+		writeErr(w, store.ErrMonthClosed)
+		return
+	}
 	m, err := s.Store.UpsertMonth(u.ID, store.Month{
-		SpaceID: id, Month: month, Inputs: b.Inputs, Actuals: b.Actuals, Status: "draft",
+		SpaceID: id, Month: month, Inputs: b.Inputs, Actuals: b.Actuals,
+		Sources: s.checkOrigins(b.Sources), Status: store.StatusDraft,
 	}, b.Revision)
 	if err != nil {
 		writeErr(w, err)
@@ -441,7 +473,7 @@ func (s *Server) planMonth(w http.ResponseWriter, r *http.Request) {
 	}
 	res := engine.Calculate(m.Inputs, sp.Policy)
 	m.Planned = &res
-	m.Status = "planned"
+	m.Status = store.StatusPlanned
 	out, err := s.Store.UpsertMonth(u.ID, m, m.Revision)
 	if err != nil {
 		writeErr(w, err)
@@ -478,7 +510,7 @@ func (s *Server) closeMonth(w http.ResponseWriter, r *http.Request) {
 	if b.Actuals != nil {
 		m.Actuals = b.Actuals
 	}
-	m.Status = "closed"
+	m.Status = store.StatusClosed
 	rev := m.Revision
 	if b.Revision != 0 {
 		rev = b.Revision
@@ -544,11 +576,11 @@ func writeErr(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "stale revision"})
 	case errors.Is(err, store.ErrForbidden):
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+	case errors.Is(err, store.ErrMonthClosed):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "El mes está cerrado. Reabrilo para editarlo."})
 	case errors.Is(err, store.ErrInvalid):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 	default:
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 	}
 }
-
-
