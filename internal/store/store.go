@@ -13,19 +13,20 @@ import (
 	"time"
 
 	"github.com/novum-org/cal/internal/engine"
+	"github.com/novum-org/cal/internal/sources"
 	"golang.org/x/crypto/bcrypt"
 
 	_ "modernc.org/sqlite"
 )
 
 var (
-	ErrNotFound       = errors.New("not found")
-	ErrUnauthorized   = errors.New("unauthorized")
-	ErrConflict       = errors.New("conflict")
-	ErrForbidden      = errors.New("forbidden")
-	ErrAlreadySetup   = errors.New("already setup")
-	ErrStaleRevision  = errors.New("stale revision")
-	ErrInvalid        = errors.New("invalid")
+	ErrNotFound      = errors.New("not found")
+	ErrUnauthorized  = errors.New("unauthorized")
+	ErrConflict      = errors.New("conflict")
+	ErrForbidden     = errors.New("forbidden")
+	ErrAlreadySetup  = errors.New("already setup")
+	ErrStaleRevision = errors.New("stale revision")
+	ErrInvalid       = errors.New("invalid")
 )
 
 const schema = `
@@ -67,6 +68,7 @@ CREATE TABLE IF NOT EXISTS months (
   inputs_json TEXT NOT NULL,
   actuals_json TEXT,
   planned_json TEXT,
+  sources_json TEXT,
   status TEXT NOT NULL,
   revision INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL,
@@ -80,6 +82,31 @@ CREATE TABLE IF NOT EXISTS source_secrets (
   config_json TEXT NOT NULL,
   PRIMARY KEY (space_id, source_id)
 );
+
+CREATE TABLE IF NOT EXISTS invites (
+  code TEXT PRIMARY KEY,
+  email TEXT NOT NULL COLLATE NOCASE,
+  space_id TEXT REFERENCES spaces(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  created_by TEXT NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  redeemed_at TEXT,
+  redeemed_by TEXT REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS invites_space ON invites(space_id) WHERE redeemed_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS month_comments (
+  id TEXT PRIMARY KEY,
+  space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+  month TEXT NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS month_comments_month ON month_comments(space_id, month);
 `
 
 type Store struct {
@@ -94,33 +121,36 @@ type User struct {
 }
 
 type Space struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	OwnerID   string         `json:"owner_id"`
-	Policy    engine.Policy  `json:"policy"`
-	Archived  bool           `json:"archived"`
-	Revision  int            `json:"revision"`
-	CreatedAt string         `json:"created_at"`
-	Role      string         `json:"role,omitempty"`
+	ID        string        `json:"id"`
+	Name      string        `json:"name"`
+	OwnerID   string        `json:"owner_id"`
+	Policy    engine.Policy `json:"policy"`
+	Archived  bool          `json:"archived"`
+	Revision  int           `json:"revision"`
+	CreatedAt string        `json:"created_at"`
+	Role      string        `json:"role,omitempty"`
 }
 
 type Month struct {
-	SpaceID   string          `json:"space_id"`
-	Month     string          `json:"month"`
-	Inputs    engine.Inputs   `json:"inputs"`
-	Actuals   map[string]float64 `json:"actuals,omitempty"`
-	Planned   *engine.Result  `json:"planned,omitempty"`
-	Status    string          `json:"status"`
-	Revision  int             `json:"revision"`
-	UpdatedAt string          `json:"updated_at"`
-	UpdatedBy string          `json:"updated_by"`
+	SpaceID string             `json:"space_id"`
+	Month   string             `json:"month"`
+	Inputs  engine.Inputs      `json:"inputs"`
+	Actuals map[string]float64 `json:"actuals,omitempty"`
+	Planned *engine.Result     `json:"planned,omitempty"`
+	// Sources records which ingest source last filled each input, and with
+	// what value, so the UI can tell an untouched API number from an override.
+	Sources   map[string]sources.Origin `json:"sources,omitempty"`
+	Status    string                    `json:"status"`
+	Revision  int                       `json:"revision"`
+	UpdatedAt string                    `json:"updated_at"`
+	UpdatedBy string                    `json:"updated_by"`
 }
 
 type Dump struct {
-	Version    int          `json:"version"`
-	ExportedAt string       `json:"exported_at"`
-	Users      []DumpUser   `json:"users"`
-	Spaces     []DumpSpace  `json:"spaces"`
+	Version    int         `json:"version"`
+	ExportedAt string      `json:"exported_at"`
+	Users      []DumpUser  `json:"users"`
+	Spaces     []DumpSpace `json:"spaces"`
 }
 
 type DumpUser struct {
@@ -131,10 +161,11 @@ type DumpUser struct {
 }
 
 type DumpSpace struct {
-	Space   Space            `json:"space"`
-	Members []DumpMember     `json:"members"`
-	Months  []Month          `json:"months"`
-	Secrets []DumpSecret     `json:"secrets"`
+	Space    Space          `json:"space"`
+	Members  []DumpMember   `json:"members"`
+	Months   []Month        `json:"months"`
+	Secrets  []DumpSecret   `json:"secrets"`
+	Comments []MonthComment `json:"comments,omitempty"`
 }
 
 type DumpMember struct {
@@ -166,6 +197,10 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := migrate(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -281,10 +316,7 @@ func (s *Store) CreateSpace(ownerID, name, preset string) (Space, error) {
 	if name == "" {
 		return Space{}, fmt.Errorf("%w: name", ErrInvalid)
 	}
-	policy := engine.NovumPreset()
-	if strings.EqualFold(preset, "generic") {
-		policy = engine.GenericPreset()
-	}
+	policy := engine.PresetByID(preset)
 	raw, err := json.Marshal(policy)
 	if err != nil {
 		return Space{}, err
@@ -397,11 +429,11 @@ func (s *Store) UpdateSpace(userID string, sp Space, expectedRev int) (Space, er
 
 func (s *Store) GetMonth(spaceID, month string) (Month, error) {
 	var m Month
-	var inputs, actuals, planned sql.NullString
+	var inputs, actuals, planned, srcs sql.NullString
 	err := s.DB.QueryRow(`
-		SELECT space_id, month, inputs_json, actuals_json, planned_json, status, revision, updated_at, updated_by
+		SELECT space_id, month, inputs_json, actuals_json, planned_json, sources_json, status, revision, updated_at, updated_by
 		FROM months WHERE space_id = ? AND month = ?`, spaceID, month,
-	).Scan(&m.SpaceID, &m.Month, &inputs, &actuals, &planned, &m.Status, &m.Revision, &m.UpdatedAt, &m.UpdatedBy)
+	).Scan(&m.SpaceID, &m.Month, &inputs, &actuals, &planned, &srcs, &m.Status, &m.Revision, &m.UpdatedAt, &m.UpdatedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Month{}, ErrNotFound
 	}
@@ -420,6 +452,9 @@ func (s *Store) GetMonth(spaceID, month string) (Month, error) {
 			m.Planned = &r
 		}
 	}
+	if srcs.Valid && srcs.String != "" {
+		_ = json.Unmarshal([]byte(srcs.String), &m.Sources)
+	}
 	return m, nil
 }
 
@@ -431,7 +466,10 @@ func (s *Store) UpsertMonth(userID string, m Month, expectedRev int) (Month, err
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return Month{}, err
 	}
-	if err == nil && expectedRev != 0 && cur.Revision != expectedRev {
+	// Once the month exists the revision is mandatory. Treating 0 as "do not
+	// check" let an editor who loaded the month before it was ever saved
+	// overwrite whoever saved it first, with no conflict reported.
+	if err == nil && cur.Revision != expectedRev {
 		return Month{}, ErrStaleRevision
 	}
 	inRaw, err := json.Marshal(m.Inputs)
@@ -446,6 +484,10 @@ func (s *Store) UpsertMonth(userID string, m Month, expectedRev int) (Month, err
 	if m.Planned != nil {
 		plan, _ = json.Marshal(m.Planned)
 	}
+	var srcs any
+	if m.Sources != nil {
+		srcs, _ = json.Marshal(m.Sources)
+	}
 	status := m.Status
 	if status == "" {
 		status = "draft"
@@ -454,17 +496,18 @@ func (s *Store) UpsertMonth(userID string, m Month, expectedRev int) (Month, err
 		}
 	}
 	_, err = s.DB.Exec(`
-		INSERT INTO months (space_id, month, inputs_json, actuals_json, planned_json, status, revision, updated_at, updated_by)
-		VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+		INSERT INTO months (space_id, month, inputs_json, actuals_json, planned_json, sources_json, status, revision, updated_at, updated_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
 		ON CONFLICT(space_id, month) DO UPDATE SET
 		  inputs_json = excluded.inputs_json,
 		  actuals_json = COALESCE(excluded.actuals_json, months.actuals_json),
 		  planned_json = COALESCE(excluded.planned_json, months.planned_json),
+		  sources_json = COALESCE(excluded.sources_json, months.sources_json),
 		  status = excluded.status,
 		  revision = months.revision + 1,
 		  updated_at = excluded.updated_at,
 		  updated_by = excluded.updated_by
-	`, m.SpaceID, m.Month, string(inRaw), act, plan, status, now(), userID)
+	`, m.SpaceID, m.Month, string(inRaw), act, plan, srcs, status, now(), userID)
 	if err != nil {
 		return Month{}, err
 	}
@@ -473,7 +516,7 @@ func (s *Store) UpsertMonth(userID string, m Month, expectedRev int) (Month, err
 
 func (s *Store) ListMonths(spaceID string) ([]Month, error) {
 	rows, err := s.DB.Query(`
-		SELECT space_id, month, inputs_json, actuals_json, planned_json, status, revision, updated_at, updated_by
+		SELECT space_id, month, inputs_json, actuals_json, planned_json, sources_json, status, revision, updated_at, updated_by
 		FROM months WHERE space_id = ? ORDER BY month DESC`, spaceID)
 	if err != nil {
 		return nil, err
@@ -482,8 +525,8 @@ func (s *Store) ListMonths(spaceID string) ([]Month, error) {
 	out := make([]Month, 0)
 	for rows.Next() {
 		var m Month
-		var inputs, actuals, planned sql.NullString
-		if err := rows.Scan(&m.SpaceID, &m.Month, &inputs, &actuals, &planned, &m.Status, &m.Revision, &m.UpdatedAt, &m.UpdatedBy); err != nil {
+		var inputs, actuals, planned, srcs sql.NullString
+		if err := rows.Scan(&m.SpaceID, &m.Month, &inputs, &actuals, &planned, &srcs, &m.Status, &m.Revision, &m.UpdatedAt, &m.UpdatedBy); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(inputs.String), &m.Inputs)
@@ -495,6 +538,9 @@ func (s *Store) ListMonths(spaceID string) ([]Month, error) {
 			if json.Unmarshal([]byte(planned.String), &r) == nil {
 				m.Planned = &r
 			}
+		}
+		if srcs.Valid && srcs.String != "" {
+			_ = json.Unmarshal([]byte(srcs.String), &m.Sources)
 		}
 		out = append(out, m)
 	}
@@ -570,6 +616,21 @@ func (s *Store) Export() (Dump, error) {
 			ds.Secrets = append(ds.Secrets, sc)
 		}
 		sec.Close()
+		crows, err := s.DB.Query(
+			`SELECT id, space_id, month, user_id, body, created_at
+			   FROM month_comments WHERE space_id = ? ORDER BY created_at`, id)
+		if err != nil {
+			return Dump{}, err
+		}
+		for crows.Next() {
+			var c MonthComment
+			if err := crows.Scan(&c.ID, &c.SpaceID, &c.Month, &c.UserID, &c.Body, &c.CreatedAt); err != nil {
+				crows.Close()
+				return Dump{}, err
+			}
+			ds.Comments = append(ds.Comments, c)
+		}
+		crows.Close()
 		d.Spaces = append(d.Spaces, ds)
 	}
 	return d, nil
@@ -628,18 +689,23 @@ func (s *Store) Import(d Dump) error {
 			if mo.Planned != nil {
 				plan, _ = json.Marshal(mo.Planned)
 			}
+			var srcs any
+			if mo.Sources != nil {
+				srcs, _ = json.Marshal(mo.Sources)
+			}
 			if _, err := tx.Exec(
-				`INSERT INTO months (space_id, month, inputs_json, actuals_json, planned_json, status, revision, updated_at, updated_by)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`INSERT INTO months (space_id, month, inputs_json, actuals_json, planned_json, sources_json, status, revision, updated_at, updated_by)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(space_id, month) DO UPDATE SET
 				   inputs_json=excluded.inputs_json,
 				   actuals_json=excluded.actuals_json,
 				   planned_json=excluded.planned_json,
+				   sources_json=excluded.sources_json,
 				   status=excluded.status,
 				   revision=excluded.revision,
 				   updated_at=excluded.updated_at,
 				   updated_by=excluded.updated_by`,
-				mo.SpaceID, mo.Month, string(inRaw), act, plan, mo.Status, mo.Revision, mo.UpdatedAt, mo.UpdatedBy,
+				mo.SpaceID, mo.Month, string(inRaw), act, plan, srcs, mo.Status, mo.Revision, mo.UpdatedAt, mo.UpdatedBy,
 			); err != nil {
 				return err
 			}
@@ -649,6 +715,16 @@ func (s *Store) Import(d Dump) error {
 				`INSERT INTO source_secrets (space_id, source_id, config_json) VALUES (?, ?, ?)
 				 ON CONFLICT(space_id, source_id) DO UPDATE SET config_json=excluded.config_json`,
 				sp.ID, sc.SourceID, string(sc.Config),
+			); err != nil {
+				return err
+			}
+		}
+		for _, c := range ds.Comments {
+			if _, err := tx.Exec(
+				`INSERT INTO month_comments (id, space_id, month, user_id, body, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(id) DO UPDATE SET body=excluded.body`,
+				c.ID, sp.ID, c.Month, c.UserID, c.Body, c.CreatedAt,
 			); err != nil {
 				return err
 			}
