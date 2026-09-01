@@ -18,9 +18,9 @@ const chartConfig = {
   ef_fill: { label: 'EF fill', color: 'var(--chart-2)' },
   product: { label: 'Product', color: 'var(--chart-3)' },
   growth: { label: 'Growth', color: 'var(--chart-4)' },
-  people: { label: 'People', color: '#42a5f5' },
+  people: { label: 'People', color: 'var(--chart-6)' },
   infra_buffer: { label: 'Reserva', color: 'var(--chart-5)' },
-  unallocated: { label: 'Sin asignar', color: '#bbdefb' },
+  unallocated: { label: 'Sin asignar', color: 'var(--chart-7)' },
   planned: { label: 'Plan', color: 'var(--chart-1)' },
   actual: { label: 'Actual', color: 'var(--chart-3)' },
 } satisfies ChartConfig

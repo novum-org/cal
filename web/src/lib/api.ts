@@ -1,4 +1,22 @@
-import { STAGES, type Inputs, type MonthRecord, type Policy, type Result, type Settings, type Space, type StageThresholds, type User } from './types.ts'
+import {
+  STAGES,
+  type AddMemberResult,
+  type Inputs,
+  type Invite,
+  type Member,
+  type MonthComment,
+  type PullResult,
+  type SourceOrigin,
+  type SourceState,
+  type MonthRecord,
+  type Policy,
+  type Preset,
+  type Result,
+  type Settings,
+  type Space,
+  type StageThresholds,
+  type User,
+} from './types.ts'
 
 const jsonHeaders = { 'Content-Type': 'application/json' }
 
@@ -49,7 +67,10 @@ export const api = {
       }),
     ),
   session: (id: string) => parse<Space>(fetch(`/api/sessions/${id}`, { credentials: 'include' })),
-  patchSession: (id: string, body: { policy?: Policy; name?: string; revision?: number }) =>
+  patchSession: (
+    id: string,
+    body: { policy?: Policy; name?: string; archived?: boolean; revision?: number },
+  ) =>
     parse<Space>(
       fetch(`/api/sessions/${id}`, {
         method: 'PATCH',
@@ -58,15 +79,69 @@ export const api = {
         body: JSON.stringify(body),
       }),
     ),
+  presets: () => parse<Preset[]>(fetch('/api/presets', { credentials: 'include' })),
+  applyPreset: (id: string, preset: string, revision: number) =>
+    parse<Space>(
+      fetch(`/api/sessions/${id}/preset`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: jsonHeaders,
+        body: JSON.stringify({ preset, revision }),
+      }),
+    ),
+  members: (id: string) =>
+    parse<Member[]>(fetch(`/api/sessions/${id}/members`, { credentials: 'include' })),
+  addMember: (id: string, email: string, role: string) =>
+    parse<AddMemberResult>(
+      fetch(`/api/sessions/${id}/members`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: jsonHeaders,
+        body: JSON.stringify({ email, role }),
+      }),
+    ),
+  removeMember: async (id: string, userId: string): Promise<void> => {
+    const res = await fetch(`/api/sessions/${id}/members/${userId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+    if (!res.ok) throw new Error('No se pudo sacar a esa persona.')
+  },
+  invites: (id: string) =>
+    parse<Invite[]>(fetch(`/api/sessions/${id}/invites`, { credentials: 'include' })),
+  revokeInvite: async (id: string, code: string): Promise<void> => {
+    const res = await fetch(`/api/sessions/${id}/invites/${code}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+    if (!res.ok) throw new Error('No se pudo anular la invitación.')
+  },
+  inviteInfo: (code: string) =>
+    parse<{ email: string; space_name: string }>(fetch(`/api/auth/invites/${code}`)),
+  redeem: (code: string, password: string) =>
+    parse<User>(
+      fetch('/api/auth/redeem', {
+        method: 'POST',
+        credentials: 'include',
+        headers: jsonHeaders,
+        body: JSON.stringify({ code, password }),
+      }),
+    ),
   month: (id: string, month: string) =>
     parse<MonthRecord>(fetch(`/api/sessions/${id}/months/${month}`, { credentials: 'include' })),
-  saveMonth: (id: string, month: string, inputs: Inputs, revision: number) =>
+  saveMonth: (
+    id: string,
+    month: string,
+    inputs: Inputs,
+    revision: number,
+    sources?: Record<string, SourceOrigin>,
+  ) =>
     parse<MonthRecord>(
       fetch(`/api/sessions/${id}/months/${month}`, {
         method: 'PUT',
         credentials: 'include',
         headers: jsonHeaders,
-        body: JSON.stringify({ inputs, revision }),
+        body: JSON.stringify({ inputs, revision, sources }),
       }),
     ),
   preview: (id: string, inputs: Inputs) =>
@@ -92,6 +167,55 @@ export const api = {
         credentials: 'include',
         headers: jsonHeaders,
         body: JSON.stringify({ actuals, revision }),
+      }),
+    ),
+  reopen: (id: string, month: string, revision: number) =>
+    parse<MonthRecord>(
+      fetch(`/api/sessions/${id}/months/${month}/reopen`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: jsonHeaders,
+        body: JSON.stringify({ revision }),
+      }),
+    ),
+  comments: (id: string, month: string) =>
+    parse<MonthComment[]>(
+      fetch(`/api/sessions/${id}/months/${month}/comments`, { credentials: 'include' }),
+    ),
+  addComment: (id: string, month: string, body: string) =>
+    parse<MonthComment>(
+      fetch(`/api/sessions/${id}/months/${month}/comments`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: jsonHeaders,
+        body: JSON.stringify({ body }),
+      }),
+    ),
+  sourceStates: (id: string) =>
+    parse<SourceState[]>(fetch(`/api/sessions/${id}/sources`, { credentials: 'include' })),
+  saveSourceConfig: (id: string, sourceId: string, config: Record<string, string>) =>
+    parse<{ source: string }>(
+      fetch(`/api/sessions/${id}/sources/${sourceId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: jsonHeaders,
+        body: JSON.stringify(config),
+      }),
+    ),
+  clearSourceConfig: async (id: string, sourceId: string): Promise<void> => {
+    const res = await fetch(`/api/sessions/${id}/sources/${sourceId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+    if (!res.ok) throw new Error('No se pudo borrar la configuración.')
+  },
+  pull: (id: string, month: string) =>
+    parse<PullResult>(
+      fetch(`/api/sessions/${id}/months/${month}/pull`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: jsonHeaders,
+        body: JSON.stringify({}),
       }),
     ),
   exportDump: async (): Promise<Blob> => {

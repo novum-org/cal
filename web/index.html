@@ -5,6 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>cal</title>
+    <script>
+      // Paints the stored theme before first paint. Without it the app renders
+      // light for a frame and then flips, which is worse than no dark mode.
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('theme')
+          var system = window.matchMedia('(prefers-color-scheme: dark)').matches
+          var dark = stored === 'dark' || ((stored === null || stored === 'system') && system)
+          document.documentElement.classList.add(dark ? 'dark' : 'light')
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

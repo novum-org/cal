@@ -144,10 +144,51 @@ export type MonthRecord = {
   inputs: Inputs
   actuals?: Record<string, number>
   planned?: Result
+  sources?: Record<string, SourceOrigin>
   status: string
   revision: number
   updated_at: string
   updated_by: string
+}
+
+export type SourceOrigin = {
+  source: string
+  value: number
+  at: string
+}
+
+export type SourceConfigField = {
+  key: string
+  label: string
+  hint?: string
+  secret: boolean
+}
+
+export type SourceState = {
+  id: string
+  name: string
+  description: string
+  fields: string[]
+  config: SourceConfigField[]
+  configured: boolean
+  values: Record<string, string>
+  secrets_set: Record<string, boolean>
+}
+
+export type PullResult = {
+  patch: Record<string, number>
+  origins: Record<string, SourceOrigin>
+  failures: { source: string; error: string }[]
+}
+
+export type MonthComment = {
+  id: string
+  space_id: string
+  month: string
+  user_id: string
+  email: string
+  body: string
+  created_at: string
 }
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -157,4 +198,29 @@ export type Snapshot = {
   saved_at: string
   inputs: Inputs
   policy: Policy
+}
+
+export type Member = {
+  user_id: string
+  email: string
+  role: string
+}
+
+export type Invite = {
+  code: string
+  email: string
+  space_id: string
+  space_name?: string
+  role: string
+  created_at: string
+  expires_at: string
+}
+
+/** Adding someone either joins an existing account or mints an invite. */
+export type AddMemberResult = { member?: Member; invite?: Invite }
+
+export type Preset = {
+  id: string
+  name: string
+  description: string
 }

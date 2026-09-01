@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import type { ReactNode } from 'react'
 
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NumericInput } from './NumericInput.tsx'
 
 type Props = {
   name: string
@@ -12,47 +12,38 @@ type Props = {
   prefix?: string
   suffix?: string
   hint?: string
+  /** Rendered next to the label, to say where the number came from. */
+  mark?: ReactNode
 }
 
-export function NumberField({ name, label, value, step, onChange, prefix, suffix, hint }: Props) {
-  const [draft, setDraft] = useState<string>(() => String(value))
-  const [seen, setSeen] = useState<number>(value)
-
-  if (seen !== value) {
-    setSeen(value)
-    if (Number(draft) !== value) setDraft(String(value))
-  }
-
-  const handleChange = (raw: string): void => {
-    setDraft(raw)
-    const parsed = Number(raw)
-    if (raw.trim() !== '' && Number.isFinite(parsed)) onChange(parsed)
-  }
-
+export function NumberField({
+  name,
+  label,
+  value,
+  step,
+  onChange,
+  prefix,
+  suffix,
+  hint,
+  mark,
+}: Props) {
   return (
-    <div className="grid gap-2">
-      <Label htmlFor={name}>{label}</Label>
-      <div className="flex items-center gap-2">
-        {prefix !== undefined && (
-          <span className="text-xs text-muted-foreground">{prefix}</span>
-        )}
-        <Input
-          id={name}
-          name={name}
-          type="number"
-          inputMode="decimal"
-          step={step}
-          value={draft}
-          onChange={(event) => handleChange(event.target.value)}
-          onBlur={() => setDraft(String(value))}
-          className="h-10 text-right font-mono tabular-nums"
-        />
-        {suffix !== undefined && (
-          <span className="text-xs text-muted-foreground">{suffix}</span>
-        )}
+    <div className="grid content-start gap-2">
+      <div className="flex min-h-5 items-center gap-2">
+        <Label htmlFor={name}>{label}</Label>
+        {mark}
       </div>
+      <NumericInput
+        id={name}
+        name={name}
+        value={value}
+        step={step}
+        onChange={onChange}
+        prefix={prefix}
+        suffix={suffix}
+      />
       {hint !== undefined && hint !== '' && (
-        <p className="text-xs text-muted-foreground">{hint}</p>
+        <p className="text-xs leading-snug text-muted-foreground">{hint}</p>
       )}
     </div>
   )

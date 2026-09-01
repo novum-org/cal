@@ -1,11 +1,11 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { STAGES } from '../lib/types.ts'
 import type { Settings, Stage, StageRule } from '../lib/types.ts'
 import { NumberField } from './NumberField.tsx'
+import { NumericInput } from './NumericInput.tsx'
 
 type KnobKey =
   | 'discord_per_player_max'
@@ -35,6 +35,7 @@ export function SettingsPanel({ settings, onChange }: Props) {
     <Card>
       <CardHeader>
         <CardTitle className="font-serif">Umbrales y reglas</CardTitle>
+        <CardDescription>Se guardan solas al cambiarlas.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         <Table>
@@ -51,30 +52,18 @@ export function SettingsPanel({ settings, onChange }: Props) {
               return (
                 <TableRow key={stage}>
                   <TableCell className="font-mono">{stage}</TableCell>
-                  <TableCell className="text-right">
-                    <Input
-                      type="number"
-                      step={0.5}
+                  <TableCell>
+                    <NumericInput
+                      aria-label={`TPS mínimo en ${stage}`}
                       value={rule.tps_min}
-                      onChange={(event) =>
-                        patchStage(stage, { ...rule, tps_min: Number(event.target.value) })
-                      }
-                      className="ml-auto h-10 w-24 text-right font-mono"
+                      step={0.5}
+                      suffix="%"
+                      onChange={(value) => patchStage(stage, { ...rule, tps_min: value })}
+                      className="ml-auto w-32"
                     />
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-3">
-                      <Input
-                        type="number"
-                        step={0.1}
-                        disabled={rule.uptime_min === null}
-                        value={rule.uptime_min ?? ''}
-                        placeholder="n/a"
-                        onChange={(event) =>
-                          patchStage(stage, { ...rule, uptime_min: Number(event.target.value) })
-                        }
-                        className="h-10 w-24 text-right font-mono"
-                      />
                       <div className="flex items-center gap-2">
                         <Checkbox
                           id={`uptime-${stage}`}
@@ -83,10 +72,23 @@ export function SettingsPanel({ settings, onChange }: Props) {
                             patchStage(stage, { ...rule, uptime_min: checked === true ? 99 : null })
                           }
                         />
-                        <Label htmlFor={`uptime-${stage}`} className="font-normal text-muted-foreground">
+                        <Label
+                          htmlFor={`uptime-${stage}`}
+                          className="cursor-pointer font-normal text-muted-foreground"
+                        >
                           pide uptime
                         </Label>
                       </div>
+                      <NumericInput
+                        aria-label={`Uptime mínimo en ${stage}`}
+                        value={rule.uptime_min ?? 0}
+                        step={0.1}
+                        suffix="%"
+                        placeholder="n/a"
+                        disabled={rule.uptime_min === null}
+                        onChange={(value) => patchStage(stage, { ...rule, uptime_min: value })}
+                        className="w-32"
+                      />
                     </div>
                   </TableCell>
                 </TableRow>

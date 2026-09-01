@@ -1,3 +1,4 @@
+import { motion } from 'motion/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 
@@ -7,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api } from '../lib/api.ts'
+import { pageVariants } from '../lib/motion.ts'
 
 export function LoginPage() {
   const nav = useNavigate()
@@ -36,7 +38,12 @@ export function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4">
+    <motion.main
+      className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4"
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+    >
       <Card>
         <CardHeader>
           <CardTitle className="font-serif text-3xl">cal</CardTitle>
@@ -55,7 +62,6 @@ export function LoginPage() {
                 autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-10"
               />
             </div>
             <div className="grid gap-2">
@@ -68,7 +74,6 @@ export function LoginPage() {
                 autoComplete={setup ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-10"
               />
             </div>
             {error !== '' && (
@@ -76,12 +81,12 @@ export function LoginPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            <Button type="submit" className="h-10">
+            <Button type="submit">
               {setup ? 'Crear y entrar' : 'Entrar'}
             </Button>
           </form>
         </CardContent>
       </Card>
-    </main>
+    </motion.main>
   )
 }

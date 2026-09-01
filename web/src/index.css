@@ -30,6 +30,8 @@
   --chart-3: #2196f3;
   --chart-4: #64b5f6;
   --chart-5: #90caf9;
+  --chart-6: #42a5f5;
+  --chart-7: #bbdefb;
   --radius: 0.625rem;
   --sidebar: #ffffff;
   --sidebar-foreground: #0d47a1;
@@ -39,6 +41,47 @@
   --sidebar-accent-foreground: #0d47a1;
   --sidebar-border: #90caf9;
   --sidebar-ring: #2196f3;
+}
+
+/* The same Material blue family, inverted: the ice that was the page becomes
+   the text, and the navy that was the text becomes the page. Primary lightens
+   to #64b5f6 so it still reads as the accent against a dark ground, which
+   flips its foreground to near-black. */
+.dark {
+  color-scheme: dark;
+  --background: #071426;
+  --foreground: #e3f2fd;
+  --card: #0f2337;
+  --card-foreground: #e3f2fd;
+  --popover: #12293f;
+  --popover-foreground: #e3f2fd;
+  --primary: #64b5f6;
+  --primary-foreground: #06182b;
+  --secondary: #1b3a57;
+  --secondary-foreground: #cfe4f7;
+  --muted: #10263b;
+  --muted-foreground: #e3f2fdb3;
+  --accent: #17324b;
+  --accent-foreground: #e3f2fd;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: #1d3d5c;
+  --input: #26506f;
+  --ring: #64b5f6;
+  --chart-1: #90caf9;
+  --chart-2: #64b5f6;
+  --chart-3: #42a5f5;
+  --chart-4: #2196f3;
+  --chart-5: #1976d2;
+  --chart-6: #b3e5fc;
+  --chart-7: #1b3a57;
+  --sidebar: #0f2337;
+  --sidebar-foreground: #e3f2fd;
+  --sidebar-primary: #64b5f6;
+  --sidebar-primary-foreground: #06182b;
+  --sidebar-accent: #17324b;
+  --sidebar-accent-foreground: #e3f2fd;
+  --sidebar-border: #1d3d5c;
+  --sidebar-ring: #64b5f6;
 }
 
 @theme inline {
@@ -58,6 +101,8 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-chart-7: var(--chart-7);
+  --color-chart-6: var(--chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -99,5 +144,55 @@
   }
   body {
     @apply m-0 bg-background text-foreground;
+  }
+}
+
+/* Motion. A Hermite smoothstep (3t² - 2t³) as a cubic-bezier: symmetric ease
+   in and out, no overshoot. `hermite-out` is its decelerating half, for things
+   that enter and stay. Both are the default for every `transition-*` utility. */
+@theme {
+  --ease-hermite: cubic-bezier(0.33, 0, 0.67, 1);
+  --ease-hermite-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --default-transition-timing-function: cubic-bezier(0.33, 0, 0.67, 1);
+  --default-transition-duration: 180ms;
+}
+
+@layer base {
+  /* One control height across inputs, selects and buttons. */
+  :root {
+    --control-h: 2.5rem;
+  }
+
+  /* Numbers are typed, not nudged: the native spinners are noise and the
+     scroll wheel silently edits values the user is only scrolling past. */
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /* Date and month pickers keep their indicator, but tinted to the palette. */
+  input[type='month']::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 180ms var(--ease-hermite);
+  }
+  input[type='month']::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
